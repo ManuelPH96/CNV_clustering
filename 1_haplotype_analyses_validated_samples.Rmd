@@ -1,0 +1,860 @@
+---
+title: "Haplotype clustering of samples validated via qPCR"
+author: "Manuel Piñero"
+date: ""
+output: html_document
+---
+
+This is the first Rmarkdown detailing the methodology and results of our work.
+
+Here we explored the validated dataset.First, we apply hierarchical clustering to unravel the CNV status of the "training dataset". Second, we assess the accuracy of the clustering. Finally, we create a subset of unambiguous SNPs to differentiate between carriers and non-carriers haplotype.
+ 
+
+```{r}
+#setwd("")
+```
+
+
+
+
+```{r}
+library(readxl)
+library(writexl)
+library(janitor)
+library(dplyr)
+library(plot.matrix) ## paquete para representar matrices
+library(stringr) ## ordenar columnas
+#library(devtools)
+library(unikn)
+library(reshape)
+library(doParallel)
+library(caret)
+library(keras)
+library(pROC)
+library(partykit)
+#library(dplyr)
+library(tidyverse)
+library(cluster) # libreria para hacer clustering
+library(fpc) # evaluación del clustering
+library("ggplot2")
+library("reshape2")
+library("purrr")
+library("dplyr")
+# let's start with a dendrogram
+library("dendextend") ## comparar y representar dendogramas
+```
+
+
+
+```{r}
+colors=c("#5b91cd", "black", "#f8e701")
+palette_haplotypes <- usecol(colors, n = 10)
+```
+
+
+
+
+## We start with the haplotype matrix for the 58 validated samples (notice there are two haplotypes per sample)
+
+```{r}
+validated_haplotypes_before_pruning=readRDS("./data_and_analyses/validated_haplotypes_before_pruning.rds")
+
+```
+
+We have **862 SNPS**
+
+
+Candidate Region: chr14:110936201-111115999. 
+
+Here extracted SNPs : chr14:110936079-111116026
+
+```{r}
+111116026-110936079
+```
+
+
+
+
+
+# Haplotype matrixes before pruning
+
+
+```{r eval=FALSE, fig.height=10, fig.width=20, include=FALSE}
+
+#output_filename <- ""
+#output_width <- 2000
+#output_height <- 1000
+
+
+# Save the plot to a PNG file with the specified dimensions
+#png(output_filename, width=output_width, height=output_height, units="px", res=150)
+
+
+
+par(mar=c(6.1, 6.1, 6.1, 6.1))
+
+brk <- 10
+
+plot_800snps = plot(as.matrix(data.frame(t(validated_haplotypes_before_pruning), check.names = F)), border=NA, na.col='white', breaks=brk, col=palette_haplotypes, xlab="", ylab="", main="", las=2,
+     key=list(side=4,  font=2, cex.axis=1, cex.lab=2, spacing.key=0.5), axis.col=list(side=3, las=3),
+     polygon.key=NULL, axis.key=NULL, spacing.key=c(1,0.5,0.5))
+abline(v=seq(from=2.5, to=130.5, by = 2), col="gray", lwd=2.8, lty=1)
+
+
+
+#dev.off()
+
+```
+
+
+
+
+
+
+
+# Pruning with Plink 
+
+- Pruning plink 1.9
+- Range 10 SNPs+-5
+- LD:0.8
+- Selecting represebtative SNPs for each range
+
+
+
+1) use the --indep-pairwise of PLINK to perform the correlation analysis of SNPs
+
+./plink --bfile cnv_imputed --indep-pairwise 5 1 0.8 --out cnv_imputed
+
+cnv_imputed is the prefix of the PLINK fileset (.bed, .bim, and .fam files) used as input,
+
+2)  The --indep-pairwise function creates a .prune.in file with the of representative SNP. This list is specified along with the --extract function in order to retrieve said SNPs. The output is a "thinned" dataset.
+
+./plink --bfile cnv_imputed --extract cnv_imputed.prune.in --out cnv_imputed_thinned --make-bed
+
+ 
+ 
+```{r eval=FALSE, include=FALSE}
+bim_prune=read.csv("./data_and_analyses/pruning_snps/cnv_imputed_thinned.bim", header = F, sep = "\t") 
+bim_prune_pos = bim_prune %>% select(V4) 
+bim_prune_pos =data.frame(lapply(bim_prune_pos, factor))
+```
+
+We extract the position from the haplotype matrix of the validated samples`
+
+```{r eval=FALSE, include=FALSE}
+pos_800snps=data.frame(colnames(validated_haplotypes_before_pruning))
+colnames(pos_800snps) = 'V4'
+```
+
+```{r eval=FALSE, include=FALSE}
+pos_800snps
+```
+
+```{r eval=FALSE, include=FALSE}
+
+prune_filtered_800snps=bim_prune_pos %>% 
+  filter(V4 %in% pos_800snps$V4)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+as.numeric(colnames(validated_haplotypes_before_pruning))[length(as.numeric(colnames(validated_haplotypes_before_pruning)))]
+
+as.numeric(colnames(validated_haplotypes_before_pruning))[1]
+```
+
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283 = validated_haplotypes_before_pruning %>% 
+  select(names(validated_haplotypes_before_pruning)[names(validated_haplotypes_before_pruning) %in% prune_filtered_800snps$V4])
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(pruned_df_800snps_283, "./data_and_analyses/pruned_df_800snps_283.rds")
+```
+
+```{r}
+pruned_df_800snps_283=readRDS("./data_and_analyses/pruned_df_800snps_283.rds")
+```
+
+```{r}
+#pruned_df_800snps_283
+```
+
+
+
+```{r}
+
+as.numeric(colnames(pruned_df_800snps_283))[length(as.numeric(colnames(pruned_df_800snps_283)))]
+
+
+as.numeric(colnames(pruned_df_800snps_283))[1]
+
+length(as.numeric(colnames(pruned_df_800snps_283)))
+```
+
+Haplotype matrix after pruning
+
+```{r eval=TRUE, fig.height=10, fig.width=20, include=TRUE}
+
+par(mar=c(6.1, 6.1, 6.1, 6.1))
+
+brk <- 10
+
+plot(as.matrix(data.frame(t(pruned_df_800snps_283[,]), check.names = F)), border=NA, na.col='white', breaks=brk, col=palette_haplotypes, xlab="", ylab="", main="", las=2,
+     key=list(side=4,  font=2, cex.axis=1, cex.lab=2, spacing.key=0.5), axis.col=list(side=3, las=3),
+     polygon.key=NULL, axis.key=NULL, spacing.key=c(1,0.5,0.5))
+abline(v=seq(from=2.5, to=130.5, by = 2), col="gray", lwd=2.8, lty=1)
+
+```
+
+
+
+
+
+# Clustering pruned 283 SNPS
+
+For clustering, we recommend to transform haplotype data type from "int" to "factor" 
+
+Source:
+
+https://towardsdatascience.com/hierarchical-clustering-on-categorical-data-in-r-a27e578f2995
+
+
+
+
+```{r}
+pruned_df_800snps_283_factor=pruned_df_800snps_283
+```
+
+
+```{r}
+pruned_df_800snps_283_factor[, 1:length(colnames(pruned_df_800snps_283_factor))] =  lapply(pruned_df_800snps_283_factor[, 1:length(colnames(pruned_df_800snps_283_factor))], as.factor)
+#pruned_df_800snps_283_factor
+```
+
+**Gower's dissimilarity distance**
+
+
+```{r}
+gower.dist_283 <- daisy(pruned_df_800snps_283_factor, metric = c("gower"))
+```
+
+
+```{r}
+class(gower.dist_283)
+```
+
+
+
+```{r fig.width=10, fig.height=5}
+set.seed(123)
+divisive.clust_283 <- diana(as.matrix(gower.dist_283), 
+                  diss = TRUE, keep.diss = TRUE)
+plot(divisive.clust_283, main = "Divisive")
+```
+
+
+
+
+
+## Divisive dendogram dendextend
+
+```{r fig.height=3, fig.width=8}
+
+dendro <- as.dendrogram(divisive.clust_283)
+dendro.col <- dendro %>%  hang.dendrogram(hang_height = .03) %>% 
+  set("branches_k_color", k = 2, value =   c("#A716D6", "#10E028")) %>%
+  set("branches_lwd", 0.8) %>%
+  set("labels_colors", 
+      value = c("darkslategray")) %>%  
+  set("labels_cex", 0.5)  %>%  rotate(as.character(divisive.clust_283$order.lab))
+ggd1 <- as.ggdend(dendro.col)
+ggplot(ggd1, horiz=F, theme = theme_minimal()) +
+  labs(x = "Num. observations", y = "Height", title = "Divisive dendrogram, k = 2") 
+```
+
+```{r eval=FALSE, include=FALSE}
+#divisive.clust_283$order.lab
+```
+
+```{r eval=FALSE, include=FALSE}
+join_info_haplotypes_and_qpcr=readRDS("./data_and_analyses/join_info_haplotypes_and_qpcr.rds")
+sorting_samples_clustering=join_info_haplotypes_and_qpcr[as.vector(divisive.clust_283$order.lab),1:6] 
+
+```
+
+# Haplotype matrix sorted by clustering order
+
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283_factor_sorting_clusters=pruned_df_800snps_283_factor[as.vector(divisive.clust_283$order.lab),]
+```
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(pruned_df_800snps_283_factor, "./data_and_analyses/pruned_df_800snps_283_factor.rds")
+```
+```{r}
+pruned_df_800snps_283_factor=readRDS("./data_and_analyses/pruned_df_800snps_283_factor.rds")
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering
+```
+
+
+Rows 72 on belong to the carriers haplotypes cluster
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering <- sorting_samples_clustering %>% 
+                                  mutate(cluster = ifelse(row_number() <= 72, "non-carrier", "carrier"))
+```
+
+```{r eval=FALSE, include=FALSE}
+#sorting_samples_clustering
+```
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped <- sorting_samples_clustering %>%
+  tidyr::pivot_wider(id_cols = c("id_immupigen"), 
+                     names_from = "haplotipo", 
+                     values_from = c("cluster"))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete=unique(left_join(sorting_samples_clustering_reshaped, sorting_samples_clustering[, 1:5], by="id_immupigen"))
+
+colnames(sorting_samples_clustering_reshaped_complete)[2:3] = c("haplotype_1", "haplotype_2")
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(sorting_samples_clustering_reshaped_complete, "./data_and_analyses/sorting_samples_clustering_reshaped_complete.rds")
+```
+
+Here we show the clustering and qPCR results of the validated samples
+
+```{r}
+sorting_samples_clustering_reshaped_complete=readRDS("./data_and_analyses/sorting_samples_clustering_reshaped_complete.rds")
+```
+
+```{r}
+sorting_samples_clustering_reshaped_complete
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype=sorting_samples_clustering_reshaped_complete %>% mutate(genotype = as.factor(paste0(haplotype_1, "/", haplotype_2)))
+```
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype
+
+```
+```{r eval=FALSE, include=FALSE}
+unique(sorting_samples_clustering_reshaped_complete_genotype$genotype)
+```
+
+We write the genotypes obtained via clustering in qPCR notation
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype$genotype <- ifelse(
+  sorting_samples_clustering_reshaped_complete_genotype$genotype == "non-carrier/non-carrier", "NC/NC",
+  ifelse(sorting_samples_clustering_reshaped_complete_genotype$genotype == "non-carrier/carrier", "HT",
+         ifelse(sorting_samples_clustering_reshaped_complete_genotype$genotype == "carrier/carrier", "C/C",
+                sorting_samples_clustering_reshaped_complete_genotype$genotype)))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype=sorting_samples_clustering_reshaped_complete_genotype %>% relocate(genotype, .after = haplotype_2) %>% relocate(id_pedigri, .after=id_immupigen)
+```
+
+
+
+
+## Accuracy of the divisive clustering method
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype = sorting_samples_clustering_reshaped_complete_genotype %>% mutate(genotype_qpcr_notation = genotype)
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype$genotype_qpcr_notation <- ifelse(
+  sorting_samples_clustering_reshaped_complete_genotype$genotype == "C/C", "DUP",
+  ifelse(sorting_samples_clustering_reshaped_complete_genotype$genotype == "HT", "DUP",
+         ifelse(sorting_samples_clustering_reshaped_complete_genotype$genotype == "NC/NC", "2N",
+                sorting_samples_clustering_reshaped_complete_genotype$genotype)))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+sorting_samples_clustering_reshaped_complete_genotype
+```
+```{r eval=FALSE, include=FALSE}
+saveRDS(sorting_samples_clustering_reshaped_complete_genotype, "./data_and_analyses/sorting_samples_clustering_reshaped_complete_genotype.rds")
+```
+
+
+```{r}
+sorting_samples_clustering_reshaped_complete_genotype=readRDS("./data_and_analyses/sorting_samples_clustering_reshaped_complete_genotype.rds")
+
+
+```
+
+
+
+```{r}
+sorting_samples_clustering_reshaped_complete_genotype
+```
+
+## Confusion matrix
+
+```{r}
+table(sorting_samples_clustering_reshaped_complete_genotype$genotype)
+```
+
+```{r}
+table(sorting_samples_clustering_reshaped_complete_genotype$CNV_validate)
+```
+```{r}
+table(sorting_samples_clustering_reshaped_complete_genotype$genotype_qpcr_notation)
+```
+
+
+**Confusion matrix with caret**
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+pred <-as.factor(sorting_samples_clustering_reshaped_complete_genotype$genotype_qpcr_notation)
+
+ref <- as.factor(sorting_samples_clustering_reshaped_complete_genotype$CNV_validate)
+
+confusion_matrix_clustering_283snps=caret::confusionMatrix(pred, ref, positive="DUP") 
+confusion_matrix_clustering_283snps
+```
+
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(confusion_matrix_clustering_283snps, "./data_and_analyses/confusion_matrix_clustering_283snps.rds" )
+```
+
+```{r}
+confusion_matrix_clustering_283snps=readRDS("./data_and_analyses/confusion_matrix_clustering_283snps.rds")
+```
+
+
+
+
+```{r}
+confusion_matrix_clustering_283snps
+```
+
+
+
+
+
+
+# Haplotype matrix after divisive clustering
+
+```{r}
+#data.frame(t(pruned_df_800snps_283[as.vector(divisive.clust_283$order.lab),]))
+```
+
+
+```{r eval=FALSE, fig.height=7, fig.width=20, include=FALSE}
+
+#output_filename <- ""
+#output_width <- 2500
+#output_height <- 1000
+
+par(mar=c(6.1, 6.1, 6.1, 6.1))
+
+brk <- 10
+
+#png(output_filename, width=output_width, height=output_height, units="px", res=150)
+
+plot(as.matrix(data.frame(t(pruned_df_800snps_283[as.vector(divisive.clust_283$order.lab),]), check.names = F)), border=NA, na.col='white', breaks=brk, col=palette_haplotypes, xlab="", ylab="", main="", las=2,
+     key=list(side=4,  font=2, cex.axis=1, cex.lab=2, spacing.key=0.5), axis.col=list(side=3, las=3),
+     polygon.key=NULL, axis.key=NULL, spacing.key=c(1,0.5,0.5))
+abline(v=seq(from=1.5, to=130.5, by = 1), col="gray", lwd=2.8, lty=1)
+
+#dev.off()
+```
+
+
+
+
+
+
+## Agglomerative clustering
+
+## Complete linkage
+
+```{r fig.width=15, fig.height=15}
+set.seed(123)
+aggl.clust.c_283 <- hclust(gower.dist_283, method = "complete")
+plot(aggl.clust.c_283,
+     main = "Agglomerative, complete linkages")
+```
+
+
+
+
+```{r fig.height=3, fig.width=8}
+
+dendro <- as.dendrogram(aggl.clust.c_283)
+dendro.col <- dendro %>%  hang.dendrogram(hang_height = .03) %>% 
+  set("branches_k_color", k = 2, value =   c("#A716D6", "#10E028")) %>%
+  set("branches_lwd", 0.8) %>%
+  set("labels_colors", 
+      value = c("darkslategray")) %>%  
+  set("labels_cex", 0.5)  %>%  rotate(aggl.clust.c_283$order)
+ggd1 <- as.ggdend(dendro.col)
+ggplot(ggd1, horiz=F, theme = theme_minimal()) +
+  labs(x = "Num. observations", y = "Height", title = "Agglomerative dendogram, complete method, k = 2") 
+```
+
+## Single linkage
+
+```{r}
+single_283 <- hclust(gower.dist_283, method = "single")
+plot(single_283,
+     main = "Agglomerative, single")
+```
+## Ward
+
+```{r}
+ward_283 <- hclust(gower.dist_283, method = "ward.D")
+plot(ward_283,
+     main = "Agglomerative, ward")
+```
+
+
+
+
+
+
+## Choosing the best clustering method
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+cophenetic=data.frame(cor(gower.dist_283, cophenetic(divisive.clust_283)),
+cor(gower.dist_283, cophenetic(aggl.clust.c_283)),
+cor(gower.dist_283, cophenetic(single_283)),
+cor(gower.dist_283, cophenetic(ward_283))) %>% round(3)
+
+colnames(cophenetic)=c("DIANA", "Complete", "Single", "Ward")
+cophenetic
+```
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(cophenetic, "./data_and_analyses/cophenetic.rds")
+```
+
+
+
+```{r}
+cophenetic=readRDS("./data_and_analyses/cophenetic.rds")
+cophenetic
+```
+
+Diana and complete linkage have the highest correlation with Gower's dissimilarity distance of the original dataset.
+
+
+```{r}
+## Source: https://talgalili.github.io/dendextend/articles/dendextend.html
+dendlist_divisive_agglomerative=dendextend::dendlist(as.dendrogram(divisive.clust_283), as.dendrogram(aggl.clust.c_283))
+```
+
+**dendextend::dend_diff function to find unique edges in the DIANA and complete linkage dendrograms**
+
+```{r}
+dend_diff(dendlist_divisive_agglomerative)
+```
+
+
+**Almost perfect correlation between these two trees**
+
+
+```{r}
+dendextend::cor.dendlist(dendlist_divisive_agglomerative)
+```
+
+
+## Evaluting optimal number of clusters
+
+```{r}
+## Source for the code: https://towardsdatascience.com/hierarchical-clustering-on-categorical-data-in-r-a27e578f2995
+# Cluster stats comes out as list while it is more convenient to look at it as a table
+# This code below will produce a dataframe with observations in columns and variables in row
+# Not quite tidy data, which will require a tweak for plotting, but I prefer this view as an output here as I find it more comprehensive 
+
+cstats.table <- function(dist, tree, k) {
+clust.assess <- c("cluster.number","n","within.cluster.ss","average.within","average.between",
+                  "wb.ratio","dunn2","avg.silwidth")
+clust.size <- c("cluster.size")
+stats.names <- c()
+row.clust <- c()
+output.stats <- matrix(ncol = k, nrow = length(clust.assess))
+cluster.sizes <- matrix(ncol = k, nrow = k)
+for(i in c(1:k)){
+  row.clust[i] <- paste("Cluster-", i, " size")
+}
+for(i in c(2:k)){
+  stats.names[i] <- paste("Test", i-1)
+  
+  for(j in seq_along(clust.assess)){
+    output.stats[j, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.assess])[j]
+    
+  }
+  
+  for(d in 1:k) {
+    cluster.sizes[d, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.size])[d]
+    dim(cluster.sizes[d, i]) <- c(length(cluster.sizes[i]), 1)
+    cluster.sizes[d, i]
+    
+  }
+}
+output.stats.df <- data.frame(output.stats)
+cluster.sizes <- data.frame(cluster.sizes)
+cluster.sizes[is.na(cluster.sizes)] <- 0
+rows.all <- c(clust.assess, row.clust)
+# rownames(output.stats.df) <- clust.assess
+output <- rbind(output.stats.df, cluster.sizes)[ ,-1]
+colnames(output) <- stats.names[2:k]
+rownames(output) <- rows.all
+is.num <- sapply(output, is.numeric)
+output[is.num] <- lapply(output[is.num], round, 2)
+output
+}
+# I am capping the maximum amount of clusters by 7
+# I want to choose a reasonable number, based on which I will be able to see basic differences between customer groups as a result
+stats.df.divisive_283 <- cstats.table(gower.dist_283, divisive.clust_283, 7)
+stats.df.divisive_283
+```
+
+```{r}
+stats.df.divisive_283
+```
+
+```{r}
+stats.df.aggl_283 <-cstats.table(gower.dist_283, aggl.clust.c_283, 7) #complete linkages looks like the most balanced approach
+stats.df.aggl_283
+```
+
+```{r}
+# --------- Choosing the number of clusters ---------#
+# Using "Elbow" and "Silhouette" methods to identify the best number of clusters
+# to better picture the trend, I will go for more than 7 clusters.
+library(ggplot2)
+# Elbow
+# Divisive clustering
+ggplot(data = data.frame(t(cstats.table(gower.dist_283, divisive.clust_283, 8))), 
+  aes(x=cluster.number, y=within.cluster.ss)) + 
+  geom_point()+
+  geom_line()+
+  ggtitle("Divisive clustering") +
+  labs(x = "Num.of clusters", y = "Within clusters sum of squares (SS)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+La mayor caída está entre 2 y 3 clusters.
+
+```{r}
+# Agglomerative clustering,provides a more ambiguous picture
+ggplot(data = data.frame(t(cstats.table(gower.dist_283, aggl.clust.c_283, 15))), 
+  aes(x=cluster.number, y=within.cluster.ss)) + 
+  geom_point()+
+  geom_line()+
+  ggtitle("Agglomerative clustering") +
+  labs(x = "Num.of clusters", y = "Within clusters sum of squares (SS)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+
+
+
+# Finding an unambiguous set of SNPs
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283_factor_sorted=pruned_df_800snps_283_factor[as.vector(divisive.clust_283$order),]
+```
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283_factor_sorted_cluster <- pruned_df_800snps_283_factor_sorted %>% 
+                                  mutate(cluster = ifelse(row_number() <= 72, "non-carrier", "carrier"))%>% relocate(cluster, .before='110936079')
+```
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283_factor_sorted_cluster
+```
+
+
+
+We eliminate 5 samples (10 haplotypes) not correctly classified
+
+```{r}
+doubt=c('283_1', '283_2', '422_1', '422_2', '320_1', '320_2', '347_1', '347_2', '378_1', '378_2')
+```
+
+```{r eval=FALSE, include=FALSE}
+pruned_df_800snps_283_factor_sorted_cluster_nodoubt=pruned_df_800snps_283_factor_sorted_cluster[!row.names(pruned_df_800snps_283_factor_sorted_cluster) %in% doubt,]
+pruned_df_800snps_283_factor_sorted_cluster_nodoubt
+```
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(pruned_df_800snps_283_factor_sorted_cluster_nodoubt, "./data_and_analyses/pruned_df_800snps_283_factor_sorted_cluster_nodoubt.rds")
+```
+
+```{r}
+haplotypes_no_doubt=readRDS("./data_and_analyses/pruned_df_800snps_283_factor_sorted_cluster_nodoubt.rds")
+```
+
+```{r}
+haplotypes_no_doubt
+```
+
+```{r}
+haplotypes_no_doubt_noncarriers=haplotypes_no_doubt %>% filter(cluster=='non-carrier')
+
+haplotypes_no_doubt_carriers=haplotypes_no_doubt %>% filter(cluster=='carrier')
+```
+
+```{r}
+haplotypes_no_doubt_noncarriers
+
+haplotypes_no_doubt_carriers
+```
+```{r}
+haplotypes_no_doubt_noncarriers
+```
+
+# Function to find equal columns in all samples
+
+```{r}
+check_same_value_cols <- function(df) {
+  same_value_cols <- df %>% 
+    summarise_all(~ all(. == .[1])) %>% 
+    unlist() %>% 
+    which()
+  
+  same_values <- df[1, same_value_cols]
+  
+  results <- data.frame(Column = names(df)[same_value_cols], CommonValue = as.character(same_values),
+                         stringsAsFactors = FALSE)
+  
+  return(results)
+}
+```
+
+We apply the function to non-carriers and carriers haplotypes
+
+```{r}
+equals_nc=check_same_value_cols(haplotypes_no_doubt_noncarriers)
+```
+
+
+```{r}
+equals_c=check_same_value_cols(haplotypes_no_doubt_carriers)
+```
+
+```{r}
+colnames(equals_nc)=c("column_nc", "value_nc")
+colnames(equals_c)=c("column_c", "value_c")
+
+equals_nc
+equals_c
+
+```
+In 140 positions all non-carriers haplotypes have the same allele, and in 108 positions all carriers have the same allele. Now we need to find the intersection of both lists of positions
+
+```{r}
+join_c_nc=left_join(equals_c,equals_nc,
+, by=c("column_c"="column_nc")) #%>% filter(value_nc != NA)
+```
+
+
+```{r}
+no_nas_join_c_nc=join_c_nc[!is.na(join_c_nc$value_nc), ] 
+```
+
+**67 SNPs allow to completely differentiate carriers and non-carriers haplotypes**
+
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+saveRDS(no_nas_join_c_nc, "./data_and_analyses/no_nas_join_c_nc.rds")
+```
+```{r}
+no_nas_join_c_nc= readRDS( "./data_and_analyses/no_nas_join_c_nc.rds")
+```
+```{r}
+no_nas_join_c_nc
+```
+
+```{r}
+SNPS67_different=as.numeric(no_nas_join_c_nc$column_c[-1])
+```
+
+
+```{r}
+SNPS67_different
+```
+
+```{r eval=FALSE, include=FALSE}
+
+write.table(SNPS67_different, file="data_and_analyses/SNPS67_different.txt", sep="\n", row.names=FALSE, col.names=FALSE, quote=FALSE)
+```
+
+
+
+```{r}
+SNPS67_different[67]-SNPS67_different[1]
+```
+```{r}
+SNPS67_different[1]
+SNPS67_different[67]
+
+```
+
+chr14:110940491-111113607
+
+```{r}
+length(SNPS67_different)
+```
+
+
+
+
+```{r}
+(SNPS67_different[67]-SNPS67_different[1])
+(SNPS67_different[67]-SNPS67_different[1])/length(SNPS67_different)
+```
+1 SNP every 2584 bases (mean)
+
+

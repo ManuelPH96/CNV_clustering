@@ -1,0 +1,27 @@
+PLINK v1.90b7 64-bit (16 Jan 2023)
+Options in effect:
+  --bfile ./haplotipos_Dualphase/cnv_imputed
+  --extract cnv_imputed.prune.in
+  --make-bed
+  --out cnv_imputed_thinned
+
+Hostname: A3040
+Working directory: C:\Users\MPINERO\OneDrive - IRTA\Escritorio\cnvs_microbioma
+Start time: Mon Mar 13 14:19:29 2023
+
+Random number seed: 1678713569
+7942 MB RAM detected; reserving 3971 MB for main workspace.
+6502 variants loaded from .bim file.
+454 people (0 males, 0 females, 454 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to cnv_imputed_thinned.nosex .
+--extract: 2299 variants remaining.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 454 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+Total genotyping rate is exactly 1.
+2299 variants and 454 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to cnv_imputed_thinned.bed + cnv_imputed_thinned.bim +
+cnv_imputed_thinned.fam ... done.
+
+End time: Mon Mar 13 14:19:29 2023
